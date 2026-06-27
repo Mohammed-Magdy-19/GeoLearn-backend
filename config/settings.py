@@ -33,6 +33,14 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost", cast=Csv())
 
 
+# Cleanly split comma-separated URLs from your environment configuration
+FRONTEND_URLS = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
+CORS_ALLOWED_ORIGINS = [
+    url.strip() for url in FRONTEND_URLS.split(",") if url.strip()
+]
+
+
 # ─────────────────────────────────────────────────────────────
 # Application Registry
 # ─────────────────────────────────────────────────────────────
