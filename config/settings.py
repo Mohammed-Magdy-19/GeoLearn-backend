@@ -32,6 +32,10 @@ SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost", cast=Csv())
 
+# Trust the X-Forwarded-Proto header to detect HTTPS connections behind reverse proxies
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 
 # Cleanly split comma-separated URLs from your environment configuration
 FRONTEND_URLS = os.environ.get("FRONTEND_URL", "http://localhost:5173")
