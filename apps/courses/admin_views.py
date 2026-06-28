@@ -1,5 +1,4 @@
 import uuid
-from pathlib import Path
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Avg, Count, Q
@@ -14,7 +13,10 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.pagination import PageNumberPagination
 
 from apps.courses.models import Course, Module, Lesson, LessonProgress, VideoSession, Enrollment, Summary, MetadataEntry, SpatialDataEntry
-from apps.courses.secure_video_service import get_secure_video_config
+from apps.courses.secure_video_service import (
+    delete_video_file,
+    save_video_file,
+)
 from apps.notifications.services import create_system_notification
 from .admin_serializers import (
     AdminCourseSerializer,
@@ -181,28 +183,11 @@ class AdminLessonViewSet(ModelViewSet):
         if not video_file:
             return
 
-        config = get_secure_video_config()
-        stream_path = Path(config["stream_path"])
-        stream_path.mkdir(parents=True, exist_ok=True)
-
-        # If replacing an existing video, remove the old file
         if lesson.secure_video_id:
-            for ext in [".mp4", ".webm", ".mkv"]:
-                old_path = stream_path / f"{lesson.secure_video_id}{ext}"
-                if old_path.exists():
-                    try:
-                        old_path.unlink()
-                    except OSError:
-                        pass
+            delete_video_file(lesson.secure_video_id)
 
-        # Save the new video file
         new_secure_video_id = uuid.uuid4()
-        ext = Path(video_file.name).suffix or ".mp4"
-        full_path = stream_path / f"{new_secure_video_id}{ext}"
-
-        with open(full_path, "wb+") as destination:
-            for chunk in video_file.chunks():
-                destination.write(chunk)
+        save_video_file(new_secure_video_id, video_file)
 
         lesson.secure_video_id = new_secure_video_id
         lesson.save(update_fields=["secure_video_id", "updated_at"])
@@ -230,15 +215,7 @@ class AdminLessonViewSet(ModelViewSet):
         slug = instance.module.course.slug
         # Clean up video file on disk before deleting the lesson
         if instance.secure_video_id:
-            config = get_secure_video_config()
-            stream_path = Path(config["stream_path"])
-            for ext in [".mp4", ".webm", ".mkv"]:
-                file_path = stream_path / f"{instance.secure_video_id}{ext}"
-                if file_path.exists():
-                    try:
-                        file_path.unlink()
-                    except OSError:
-                        pass
+            delete_video_file(instance.secure_video_id)
         instance.delete()
         create_system_notification(
             title="🗑️ حذف درس",
@@ -273,28 +250,11 @@ class VideoUploadView(APIView):
 
         lesson = get_object_or_404(Lesson, id=lesson_id)
 
-        config = get_secure_video_config()
-        stream_path = Path(config["stream_path"])
-        stream_path.mkdir(parents=True, exist_ok=True)
-
-        # ── If a previous video exists, remove its file from disk ──────────
         if lesson.secure_video_id:
-            for ext in [".mp4", ".webm", ".mkv"]:
-                old_path = stream_path / f"{lesson.secure_video_id}{ext}"
-                if old_path.exists():
-                    try:
-                        old_path.unlink()
-                    except OSError:
-                        pass  # Non-fatal; continue with the upload
+            delete_video_file(lesson.secure_video_id)
 
-        # ── Save the new video file ─────────────────────────────────────────
         new_secure_video_id = uuid.uuid4()
-        ext = Path(video_file.name).suffix or ".mp4"
-        full_path = stream_path / f"{new_secure_video_id}{ext}"
-
-        with open(full_path, "wb+") as destination:
-            for chunk in video_file.chunks():
-                destination.write(chunk)
+        save_video_file(new_secure_video_id, video_file)
 
         # ── Update lesson record ────────────────────────────────────────────
         # Placeholder duration: replace with ffprobe integration if needed.
@@ -331,16 +291,7 @@ class VideoDeleteView(APIView):
         """
         lesson = get_object_or_404(Lesson, secure_video_id=secure_video_id)
 
-        # Remove the physical file from disk
-        config = get_secure_video_config()
-        stream_path = Path(config["stream_path"])
-        for ext in [".mp4", ".webm", ".mkv"]:
-            file_path = stream_path / f"{secure_video_id}{ext}"
-            if file_path.exists():
-                try:
-                    file_path.unlink()
-                except OSError:
-                    pass  # Log in production; don't block the DB cleanup
+        delete_video_file(uuid.UUID(secure_video_id))
 
         # Clear video reference and reset duration on the lesson
         lesson.secure_video_id = None

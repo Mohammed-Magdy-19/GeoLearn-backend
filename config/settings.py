@@ -263,8 +263,9 @@ SECURE_VIDEO_TOKEN_SECRET = config(
 )
 
 # Absolute filesystem path to the encrypted video storage directory.
-# In production: must be outside the web root, readable only by the Django process.
-# In development: relative path under BASE_DIR is acceptable.
+# In production: mount a persistent volume (e.g. Railway Volume) and point
+# SECURE_VIDEO_STREAM_PATH at the mount, e.g. /data/secure_videos.
+# Without persistent storage, uploaded videos are lost on redeploy.
 SECURE_VIDEO_STREAM_PATH = config(
     "SECURE_VIDEO_STREAM_PATH",
     default=str(BASE_DIR / "secure_videos"),

@@ -52,6 +52,7 @@ from .secure_video_service import (
     revoke_session,
     serve_secure_stream,
     get_video_metadata,
+    get_video_file_path,
 )
 
 
@@ -299,7 +300,18 @@ class VideoStreamView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Serve the secure stream
+        # Serve the secure stream (404 when DB has secure_video_id but file is missing)
+        if not get_video_file_path(lesson.secure_video_id):
+            return Response(
+                {
+                    "detail": (
+                        "Video file not found on server. "
+                        "The lesson video may need to be re-uploaded."
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         return serve_secure_stream(lesson.secure_video_id, request)
 
 

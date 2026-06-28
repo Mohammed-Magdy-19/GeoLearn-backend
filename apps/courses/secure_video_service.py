@@ -198,6 +198,23 @@ def get_video_metadata(lesson: Lesson) -> dict:
 # Secure Stream Delivery
 # ─────────────────────────────────────────────────────────────
 
+VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv")
+
+
+def get_stream_path() -> Path:
+    """Return the configured secure video storage directory."""
+    config = get_secure_video_config()
+    return Path(config["stream_path"])
+
+
+def normalize_video_extension(ext: str) -> str:
+    """Normalize uploaded file extensions to lowercase supported values."""
+    normalized = (ext or ".mp4").lower()
+    if normalized not in VIDEO_EXTENSIONS:
+        normalized = ".mp4"
+    return normalized
+
+
 def get_video_file_path(secure_video_id: uuid.UUID) -> Path | None:
     """
     Resolve the physical file path for a secure video.
@@ -205,17 +222,53 @@ def get_video_file_path(secure_video_id: uuid.UUID) -> Path | None:
     In production, this would interface with encrypted storage.
     For development, it looks in the configured stream path.
     """
-    config = get_secure_video_config()
-    stream_path = Path(config["stream_path"])
+    stream_path = get_stream_path()
+    if not stream_path.exists():
+        return None
 
-    # Look for video file with secure_video_id as filename
-    # Supports multiple formats: mp4, webm, mkv
-    for ext in [".mp4", ".webm", ".mkv"]:
+    video_id = str(secure_video_id).lower()
+
+    # Case-insensitive lookup — uploads may preserve original extension casing.
+    for file_path in stream_path.iterdir():
+        if not file_path.is_file():
+            continue
+        if file_path.stem.lower() == video_id and file_path.suffix.lower() in VIDEO_EXTENSIONS:
+            return file_path
+
+    # Fallback to exact filename checks for backwards compatibility.
+    for ext in VIDEO_EXTENSIONS:
         file_path = stream_path / f"{secure_video_id}{ext}"
         if file_path.exists():
             return file_path
 
     return None
+
+
+def save_video_file(secure_video_id: uuid.UUID, uploaded_file) -> Path:
+    """Persist an uploaded lesson video to the secure video store."""
+    stream_path = get_stream_path()
+    stream_path.mkdir(parents=True, exist_ok=True)
+
+    ext = normalize_video_extension(Path(uploaded_file.name).suffix)
+    full_path = stream_path / f"{secure_video_id}{ext}"
+
+    with open(full_path, "wb+") as destination:
+        for chunk in uploaded_file.chunks():
+            destination.write(chunk)
+
+    return full_path
+
+
+def delete_video_file(secure_video_id: uuid.UUID) -> None:
+    """Remove a secure video file from disk, if present."""
+    file_path = get_video_file_path(secure_video_id)
+    if not file_path or not file_path.exists():
+        return
+
+    try:
+        file_path.unlink()
+    except OSError:
+        pass
 
 
 def serve_secure_stream(secure_video_id: uuid.UUID, request) -> FileResponse | HttpResponseNotFound:
