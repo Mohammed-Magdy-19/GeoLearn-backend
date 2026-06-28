@@ -223,6 +223,13 @@ CORS_ALLOWED_ORIGINS = config(
     default="http://localhost:5173",
     cast=Csv(),
 )
+
+# Convert to list and ensure localhost/127.0.0.1 are always allowed for local development/testing
+CORS_ALLOWED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
+for local_origin in ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"]:
+    if local_origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(local_origin)
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-playback-token",
